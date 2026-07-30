@@ -44,7 +44,11 @@ jobs:
         git config --global user.email "rng+rng@stuy.edu"
         git config --global user.name "𓆙"
 
-        git add .
-        git commit -m "𓂈"
+        git add -A
 
-        git push
+        if git diff --cached --quiet; then
+          echo "× 𓂈"
+        else
+          git commit -m "𓂈"
+          git push
+        fi
