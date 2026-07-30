@@ -1,0 +1,36 @@
+name: 𓂈
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout repo
+      uses: actions/checkout@v4
+
+    - name: git pull
+      run: |-
+        git pull
+
+    - name: setup python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.13
+
+    - name: rename files
+      run: |-
+        python audio_files.py ./
+
+    - name: push if changed
+      run: |-
+        git config --global user.email "rng+rng@stuy.edu"
+        git config --global user.name "𓆙"
+
+        git add .
+        git commit -m "𓂈"
+
+        git push
