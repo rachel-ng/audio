@@ -37,6 +37,7 @@ jobs:
 
     - name: rename files
       run: |-
+        python audio_files.py ./ --undo
         python audio_files.py ./
 
     - name: push if changed

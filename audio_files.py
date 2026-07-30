@@ -23,15 +23,15 @@ DURATION_SUFFIX_RE = re.compile(
 
 def format_duration(seconds: float) -> str:
     total_seconds = int(seconds)
-    milliseconds = int(round((seconds - total_seconds) * 1000))
+    milliseconds = int(round((seconds - total_seconds) * 100))
     hours, remainder = divmod(total_seconds, 3600)
     minutes, secs = divmod(remainder, 60)
 
     if hours:
-        return f"{hours}h{minutes:02d}m{secs:02d}.{milliseconds:03d}s"
+        return f"{hours}h{minutes:02d}m{secs:02d}.{milliseconds:02d}s"
     if minutes:
-        return f"{minutes}m{secs:02d}.{milliseconds:03d}s"
-    return f"{secs}.{milliseconds:03d}s"
+        return f"{minutes}m{secs:02d}.{milliseconds:02d}s"
+    return f"{secs}.{milliseconds:02d}s"
 
 
 def get_audio_duration(path: Path) -> float:
