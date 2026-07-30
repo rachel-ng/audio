@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Iterable
 
 
-DURATION_SUFFIX_RE = re.compile(r"__(?:\d+h\d{2}m\d{2}s(?:\.\d{3})?|\d+m\d{2}s(?:\.\d{3})?|\d+s(?:\.\d{3})?)$")
+DURATION_SUFFIX_RE = re.compile(
+    r"^(?:(?:(?P<hours>\d+)h)?(?:(?P<minutes>\d+)m)?(?P<seconds>\d+)(?:\.(?P<milliseconds>\d{1,3}))?s)$"
+)
 
 
 def format_duration(seconds: float) -> str:
@@ -87,13 +89,40 @@ def build_new_name(path: Path, duration: float) -> Path:
     return candidate
 
 
+def has_duration_suffix(path: Path) -> bool:
+    if "__" not in path.stem:
+        return False
+
+    _, suffix = path.stem.rsplit("__", 1)
+    return DURATION_SUFFIX_RE.fullmatch(suffix) is not None
+
+
+def build_original_name(path: Path) -> Path:
+    parent = path.parent
+    stem = path.stem
+    if "__" not in stem:
+        return path
+
+    original_stem, suffix = stem.rsplit("__", 1)
+    if DURATION_SUFFIX_RE.fullmatch(suffix) is None:
+        return path
+
+    candidate = parent / f"{original_stem}{path.suffix}"
+    counter = 1
+    while candidate.exists() and candidate != path:
+        candidate = parent / f"{original_stem}({counter}){path.suffix}"
+        counter += 1
+
+    return candidate
+
+
 def rename_mp3_files(folder: Path, dry_run: bool = False) -> int:
     renamed = 0
     for path in iter_mp3_files(folder):
         if not path.is_file():
             continue
 
-        if DURATION_SUFFIX_RE.search(path.stem):
+        if has_duration_suffix(path):
             print(f"Skipping already renamed file: {path.name}")
             continue
 
@@ -115,16 +144,43 @@ def rename_mp3_files(folder: Path, dry_run: bool = False) -> int:
     return renamed
 
 
+def undo_mp3_files(folder: Path, dry_run: bool = False) -> int:
+    undone = 0
+    for path in iter_mp3_files(folder):
+        if not path.is_file():
+            continue
+
+        if not has_duration_suffix(path):
+            continue
+
+        original_path = build_original_name(path)
+        if original_path == path:
+            continue
+
+        print(f"{'Would undo' if dry_run else 'Undoing'}: {path.name} -> {original_path.name}")
+        if not dry_run:
+            path.rename(original_path)
+        undone += 1
+
+    return undone
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Append MP3 audio length to filenames")
     parser.add_argument("folder", nargs="?", default=".", help="Folder containing MP3 files")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be renamed")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be renamed or undone")
+    parser.add_argument("--undo", action="store_true", help="Restore original filenames from duration-suffixed names")
     args = parser.parse_args()
 
     folder = Path(args.folder).expanduser().resolve()
     if not folder.exists() or not folder.is_dir():
         print(f"Folder not found: {folder}", file=sys.stderr)
         return 1
+
+    if args.undo:
+        undone = undo_mp3_files(folder, dry_run=args.dry_run)
+        print(f"Processed {undone} file(s).")
+        return 0
 
     renamed = rename_mp3_files(folder, dry_run=args.dry_run)
     print(f"Processed {renamed} file(s).")
