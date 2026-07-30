@@ -9,7 +9,9 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import filecmp
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -70,7 +72,7 @@ def get_audio_duration(path: Path) -> float:
 
 def iter_mp3_files(folder: Path) -> Iterable[Path]:
     for path in sorted(folder.rglob("*.mp3")):
-        if path.is_file():
+        if path.is_file() and ".all" not in path.parts:
             yield path
 
 
@@ -165,11 +167,44 @@ def undo_mp3_files(folder: Path, dry_run: bool = False) -> int:
     return undone
 
 
+def copy_mp3_files(folder: Path, dry_run: bool = False) -> int:
+    copied = 0
+    destination_root = folder / ".all"
+
+    for path in iter_mp3_files(folder):
+        if not path.is_file():
+            continue
+
+        relative_path = path.relative_to(folder)
+        if relative_path.parent.parts:
+            target_name = "_".join((*relative_path.parent.parts, path.stem)) + path.suffix
+        else:
+            target_name = path.name
+
+        target_path = destination_root / target_name
+        counter = 1
+        while target_path.exists() and target_path != path:
+            if filecmp.cmp(path, target_path, shallow=False):
+                print(f"Skipping already copied file: {path.name}")
+                break
+            target_path = destination_root / f"{Path(target_name).stem}({counter}){path.suffix}"
+            counter += 1
+        else:
+            print(f"{'Would copy' if dry_run else 'Copying'}: {path} -> {target_path}")
+            if not dry_run:
+                destination_root.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target_path)
+            copied += 1
+
+    return copied
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Append MP3 audio length to filenames")
     parser.add_argument("folder", nargs="?", default=".", help="Folder containing MP3 files")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be renamed or undone")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be renamed, undone, or copied")
     parser.add_argument("--undo", action="store_true", help="Restore original filenames from duration-suffixed names")
+    parser.add_argument("--copy-mp3s", action="store_true", help="Recursively copy MP3 files into the ignored .all folder")
     args = parser.parse_args()
 
     folder = Path(args.folder).expanduser().resolve()
@@ -177,9 +212,17 @@ def main() -> int:
         print(f"Folder not found: {folder}", file=sys.stderr)
         return 1
 
+    if args.undo and args.copy_mp3s:
+        parser.error("cannot use --undo and --copy-mp3s together")
+
     if args.undo:
         undone = undo_mp3_files(folder, dry_run=args.dry_run)
         print(f"Processed {undone} file(s).")
+        return 0
+
+    if args.copy_mp3s:
+        copied = copy_mp3_files(folder, dry_run=args.dry_run)
+        print(f"Copied {copied} file(s).")
         return 0
 
     renamed = rename_mp3_files(folder, dry_run=args.dry_run)
